@@ -11,7 +11,11 @@ The system processes uploaded videos frame-by-frame using computer vision models
 - Face recognition to whitelist selected identities
 - Selective face blurring
 - Download processed video when complete
+- 
+## Requirements
 
+- Python 3.12+
+- pip
 
 ## Setup and Run
 
