@@ -12,9 +12,7 @@ The system processes uploaded videos frame-by-frame using computer vision models
 - Selective face blurring
 - Download processed video when complete
 
-You can add this short section to your **README.md**.
 
-````markdown
 ## Setup and Run
 
 ### 1. Create a virtual environment
