@@ -66,3 +66,8 @@ Visit:
 ```
 http://127.0.0.1:8000
 ```
+### 5. To run python shell for managing SQLite DB
+
+```
+python manage.py shell
+```

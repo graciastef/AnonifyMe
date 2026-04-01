@@ -1,0 +1,22 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Upload Video</title>
+</head>
+<body>
+  <h1>Upload Video</h1>
+
+  <form id="uploadForm">
+    {% csrf_token %}
+    <input id="videoFile" name="file" type="file" accept="video/*" required />
+    <button type="submit">Upload</button>
+  </form>
+
+  <pre id="statusBox"></pre>
+
+  <script src="{% static 'js/upload.js' %}"></script>
+</body>
+</html>
