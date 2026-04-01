@@ -34,6 +34,7 @@ def upload_to_blob_storage(uploaded_file):
         )
     except Exception as e:
         print(f"UploadToBlobStorage::Error {e}")
+        raise RuntimeError("Upload Failed. Cannot connect to blob storage.")
 
     file_url = f"{settings.AZURE_BLOB_URL}/{settings.AZURE_UPLOAD_CONTAINER_NAME}/{unique_filename}"
     print(f"file url: {file_url}, type: {type(file_url)}")
@@ -47,5 +48,6 @@ def upload_to_blob_storage(uploaded_file):
         )
     except Exception as e:
         print(f"CreateFileMetadata object::Error {e}")
+        raise RuntimeError("Failed to create metadata.")
 
     return upload_record
