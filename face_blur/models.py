@@ -6,10 +6,13 @@ from django.core import serializers
 class FileMetadata(models.Model):
     class Status(models.TextChoices):
         UPLOADED = "UPLOADED", "Uploaded"
+        WHITELIST_UPLOADED = "WHITELIST_UPLOADED", "Whitelist Uploaded"
         PROCESSING = "PROCESSING", "Processing"
-        DONE = "DONE", "Done"
+        COMPLETED = "COMPLETED", "Completed"
+        FAILED = "FAILED", "Failed"
 
     original_file_name = models.CharField(max_length=500)
+    file_key = models.CharField(max_length=256, null=True)
     upload_blob_url = models.URLField(max_length=2000)
     download_blob_url = models.URLField(null=True, blank=True, max_length=2000)
     date_created = models.DateTimeField(auto_now_add=True)

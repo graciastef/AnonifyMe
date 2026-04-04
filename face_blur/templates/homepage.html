@@ -9,13 +9,22 @@
 <body>
   <h1>Upload Video</h1>
 
-  <form id="uploadForm">
+  <form id="videoForm">
     {% csrf_token %}
     <input id="videoFile" name="file" type="file" accept="video/*" required />
     <button type="submit">Upload</button>
   </form>
 
-  <pre id="statusBox"></pre>
+  <p id="videoResult"></p>
+
+  <h2>Upload Whitelist Images</h2>
+  <form id="whitelistForm">
+    <input type="file" id="whitelistFiles" multiple accept="image/*" required />
+    <br><br>
+    <button type="submit">Upload Whitelist</button>
+  </form>
+
+  <p id="whitelistResult"></p>
 
   <script src="{% static 'js/upload.js' %}"></script>
 </body>

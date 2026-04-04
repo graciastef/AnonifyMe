@@ -7,7 +7,13 @@ function getCsrfToken() {
   return input ? input.value : null;
 }
 
-form.addEventListener("submit", async (event) => {
+let currentFileKey = null;
+
+// Video Upload
+const videoForm = document.getElementById("videoForm");
+const videoResult = document.getElementById("videoResult");
+
+videoForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const file = fileInput.files[0];
@@ -26,7 +32,7 @@ form.addEventListener("submit", async (event) => {
   formData.append("file", file);
 
   try {
-    const response = await fetch("/api/upload/", {
+    const response = await fetch("/api/videos/", {
       method: "POST",
       body: formData,
       headers: {
@@ -36,8 +42,48 @@ form.addEventListener("submit", async (event) => {
     });
 
     const data = await response.json();
-    statusBox.textContent = JSON.stringify(data, null, 2);
+    if (!response.ok) throw new Error(data.error);
+    currentFileKey = data.file_key;
+
+    videoResult.textContent = JSON.stringify(data, null, 2);
   } catch (error) {
-    statusBox.textContent = error.message;
+    videoResult.textContent = "Error: " + error.message;
+  }
+});
+
+// Whitelist Upload
+
+const whitelistForm = document.getElementById("whitelistForm");
+const whitelistResult = document.getElementById("whitelistResult");
+
+whitelistForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const files = document.getElementById("whitelistFiles").files;
+
+  const formData = new FormData();
+  formData.append("file_key", currentFileKey);
+
+  for (let i = 0; i < files.length; i++) {
+    formData.append("files", files[i]);
+  }
+
+  try {
+    const res = await fetch("/api/whitelist-images/", {
+      method: "POST",
+      body: formData,
+      headers: {
+        "X-CSRFToken": getCsrfToken(),
+      },
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.error);
+
+    whitelistResult.textContent = JSON.stringify(data, null, 2);
+
+  } catch (err) {
+    whitelistResult.textContent = "Error: " + err.message;
   }
 });

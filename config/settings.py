@@ -20,6 +20,7 @@ AZURE_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID")
 AZURE_CLIENT_SECRET = os.environ.get("CLIENT_SECRET")
 AZURE_TENANT_ID = os.environ.get("TENANT_ID")
 AZURE_UPLOAD_CONTAINER_NAME = os.environ.get("AZURE_UPLOAD_CONTAINER_NAME")
+AZURE_WHITELIST_FOLDER = os.environ.get("AZURE_WHITELIST_FOLDER")
 AZURE_DOWNLOAD_CONTAINER_NAME = os.environ.get("AZURE_DOWNLOAD_CONTAINER_NAME")
 AZURE_BLOB_URL = os.environ.get("AZURE_BLOB_URL")
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
