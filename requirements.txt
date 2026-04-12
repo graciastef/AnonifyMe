@@ -1,5 +1,8 @@
 Django==6.0.3
 djangorestframework==3.17.1
+onnx==1.16.2
+onnxruntime==1.24.4
+onnxruntime-gpu==1.24.4; sys_platform != 'darwin'
 
 azure-storage-blob==12.28.0
 azure-identity==1.25.3
@@ -7,3 +10,20 @@ azure-identity==1.25.3
 python-dotenv==1.0.1
 
 psycopg2-binary==2.9.9
+
+clearml==2.1.5
+
+numpy==1.26.4
+opencv-contrib-python-headless
+pycocotools==2.0.11
+torch==2.9.0
+torchvision==0.24.0
+insightface==0.7.3
+deep-sort-realtime
+setuptools==81.0.0
+deepface==0.0.99
+ffmpeg-python==0.2.0
+imageio[ffmpeg]==2.37.3
+tf-keras==2.19.0
+tensorflow==2.19.0
+protobuf

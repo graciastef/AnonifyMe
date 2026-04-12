@@ -1,9 +1,11 @@
+import json
 from http import HTTPStatus
 
-from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.http import JsonResponse, StreamingHttpResponse
+from django.views.decorators.http import require_POST, require_GET
 from django.shortcuts import render
 
+from face_blur.services.video_processing import trigger_video_processing, VideoProcessingTask
 from face_blur.services.video_storage import *
 
 # frontend views
@@ -109,7 +111,7 @@ def upload_whitelist(request):
                 "status": updated_record.status,
                 "date_created": updated_record.date_created,
             },
-            status=HTTPStatus.CREATED,
+            status=HTTPStatus.OK,
         )
     except FileNotFoundError:
         return JsonResponse(
@@ -121,3 +123,33 @@ def upload_whitelist(request):
             {"error": str(e)},
             status=HTTPStatus.INTERNAL_SERVER_ERROR,
         )
+
+@require_GET
+def progress_stream(request, file_key: str):
+    """
+    Stream processing progress to frontend.
+    """
+    # check if file exists
+    try:
+        record = FileMetadata.objects.get(file_key=file_key)
+        if record.status != FileMetadata.Status.WHITELIST_UPLOADED:
+            raise RuntimeError(
+                f"Video cannot be processed: expected status '{FileMetadata.Status.WHITELIST_UPLOADED}', got '{record.status}'."
+            )
+    except FileMetadata.DoesNotExist:
+        raise FileNotFoundError(f"No FileMetadata record found for file_key={file_key}")
+
+    task = trigger_video_processing(str(file_key))
+
+    def event_stream():
+        while True:
+            task.progress_event.wait(timeout=30)
+            task.progress_event.clear()
+            yield f"data: {json.dumps(task.progress)}\n\n"
+            if task.progress["percentage"] >= 100:
+                break
+
+    response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
+    response["Cache-Control"] = "no-cache"
+    response["X-Accel-Buffering"] = "no"
+    return response

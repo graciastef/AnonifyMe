@@ -82,8 +82,39 @@ whitelistForm.addEventListener("submit", async (e) => {
     if (!res.ok) throw new Error(data.error);
 
     whitelistResult.textContent = JSON.stringify(data, null, 2);
+    startProgressStream(currentFileKey)
 
   } catch (err) {
     whitelistResult.textContent = "Error: " + err.message;
   }
 });
+
+
+// get progress
+function startProgressStream(fileKey) {
+    const container = document.getElementById("progressContainer");
+    const bar = document.getElementById("progressBar");
+    const text = document.getElementById("progressText");
+    const eta = document.getElementById("etaText");
+
+    container.style.display = "block";
+
+    const source = new EventSource(`/api/progress/${fileKey}/`);
+    source.onmessage = (e) => {
+        const { percentage, eta: etaStr } = JSON.parse(e.data);
+        bar.value = percentage;
+        text.textContent = `${percentage}%`;
+        eta.textContent = etaStr ? `ETA: ${etaStr}` : "";
+
+        if (percentage >= 100) {
+            source.close();
+            text.textContent = "Processing complete!";
+            eta.textContent = "";
+        }
+    };
+
+    source.onerror = () => {
+        source.close();
+        text.textContent = "Connection lost.";
+    };
+}
