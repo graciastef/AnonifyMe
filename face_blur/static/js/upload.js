@@ -110,6 +110,7 @@ function startProgressStream(fileKey) {
             source.close();
             text.textContent = "Processing complete!";
             eta.textContent = "";
+            downloadBtn.disabled = false;
         }
     };
 
@@ -118,3 +119,21 @@ function startProgressStream(fileKey) {
         text.textContent = "Connection lost.";
     };
 }
+
+downloadBtn.addEventListener("click", async () => {
+  if (!currentFileKey) return;
+
+  try {
+    const res = await fetch(`/api/download/${encodeURIComponent(currentFileKey)}/`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Download failed");
+    }
+
+    window.location.href = data.download_url;
+  } catch (err) {
+    console.error(err);
+    alert(err.message);
+  }
+});

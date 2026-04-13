@@ -18,7 +18,7 @@ from face_blur.services.face_recognition import FaceRecognizer
 from face_blur.services.video_storage import (
     download_blob_by_name,
     download_blobs,
-    upload_local_file_to_blob,
+    upload_local_file_to_blob, generate_download_sas_url
 )
 from .face_detection import Detection
 
@@ -263,7 +263,7 @@ class VideoProcessingTask:
             self.progress_event.set()
 
             self.add_audio()
-            output_url = upload_local_file_to_blob(
+            output_url, output_path = upload_local_file_to_blob(
                 local_file_path=self.final_output_path,
                 file_key=self.file_key, )
 
@@ -278,7 +278,7 @@ class VideoProcessingTask:
             self.logger.report_single_value("faces_blurred", self.blurred_faces)
 
             self.record.status = FileMetadata.Status.COMPLETED
-            self.record.download_blob_url = output_url
+            self.record.download_blob_url = generate_download_sas_url(output_path)
             self.record.date_processing_finished = timezone.localtime()
             self.record.save(update_fields=["status", "download_blob_url", "date_processing_finished"])
 

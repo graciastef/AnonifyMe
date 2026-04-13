@@ -1,8 +1,10 @@
 import uuid
 import os
+from datetime import datetime, timezone, timedelta
+
 from django.conf import settings
 from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient, ContentSettings
+from azure.storage.blob import BlobServiceClient, ContentSettings, BlobSasPermissions, generate_blob_sas
 
 from ..models import FileMetadata
 
@@ -75,7 +77,9 @@ def upload_local_file_to_blob(
     file_key: str,
     content_type: str = "video/mp4",
 ) -> str:
-    container_client = blob_service_client.get_container_client(settings.AZURE_CONTAINER_NAME)
+    container_name = settings.AZURE_CONTAINER_NAME
+    container_client = blob_service_client.get_container_client(container_name)
+
     filename = os.path.basename(local_file_path)
     blob_path = build_blob_path(file_key, filename=filename, upload=False)
     blob_client = container_client.get_blob_client(blob_path)
@@ -91,7 +95,9 @@ def upload_local_file_to_blob(
         print(f"UploadLocalFileToBlob::Error {e}")
         raise RuntimeError("Failed to upload local file to blob storage.")
 
-    return build_url(blob_path)
+    blob_url = build_url(blob_path)
+
+    return blob_url, blob_path
 
 
 def upload_image_to_blob(whitelist_images, file_key: str) -> FileMetadata:
@@ -112,7 +118,6 @@ def upload_image_to_blob(whitelist_images, file_key: str) -> FileMetadata:
     except Exception as e:
         print(f"UploadImageToBlob::Error {e}")
         raise RuntimeError("Failed to upload whitelist images.")
-
 
 # ── download ──────────────────────────────────────────────────────────────────
 
@@ -161,3 +166,33 @@ def download_blobs(file_key: str, local_dir: str, get_whitelisted: bool = True) 
         raise RuntimeError(f"Failed to download blobs from prefix: {prefix}")
 
     return downloaded
+
+def generate_download_sas_url(blob_path: str, expires_in_minutes: int = 63) -> str:
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(minutes=expires_in_minutes)
+
+    # 1. Ask Azure for a user delegation key using Entra-authenticated client
+    user_delegation_key = blob_service_client.get_user_delegation_key(
+        key_start_time=now,
+        key_expiry_time=expiry,
+    )
+
+    # 2. Generate SAS for this specific blob
+    sas_token = generate_blob_sas(
+        account_name=settings.AZURE_STORAGE_ACCOUNT_NAME,
+        container_name=settings.AZURE_CONTAINER_NAME,
+        blob_name=blob_path,
+        user_delegation_key=user_delegation_key,
+        permission=BlobSasPermissions(read=True),
+        expiry=expiry,
+        start=now,
+        content_disposition="attachment; filename=processed_video.mp4"
+    )
+
+    # 3. Build full downloadable URL
+    blob_url = (
+        f"{settings.AZURE_BLOB_URL}/"
+        f"{settings.AZURE_CONTAINER_NAME}/"
+        f"{blob_path}"
+    )
+    return f"{blob_url}?{sas_token}"

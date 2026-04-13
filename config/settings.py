@@ -25,6 +25,7 @@ AZURE_CONTAINER_NAME = os.environ.get("AZURE_CONTAINER_NAME")
 AZURE_UPLOAD_DIR = os.environ.get("AZURE_UPLOAD_DIR")
 AZURE_DOWNLOAD_DIR = os.environ.get("AZURE_DOWNLOAD_DIR")
 AZURE_BLOB_URL = os.environ.get("AZURE_BLOB_URL")
+AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME")
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 

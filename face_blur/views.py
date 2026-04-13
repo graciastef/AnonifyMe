@@ -153,3 +153,33 @@ def progress_stream(request, file_key: str):
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
     return response
+
+@require_GET
+def download_video(request, file_key):
+    record = FileMetadata.objects.filter(file_key=file_key).first()
+
+    if not record:
+        return JsonResponse(
+            {"error": "File not found"},
+            status=HTTPStatus.NOT_FOUND,
+        )
+
+    if record.status != FileMetadata.Status.COMPLETED:
+        return JsonResponse(
+            {"error": "Video is not ready yet"},
+            status=HTTPStatus.BAD_REQUEST,
+        )
+
+    if not record.download_blob_url:
+        return JsonResponse(
+            {"error": "Processed video URL is missing"},
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+        )
+
+    return JsonResponse(
+        {
+            "file_key": str(record.file_key),
+            "download_url": record.download_blob_url,
+        },
+        status=HTTPStatus.OK,
+    )
