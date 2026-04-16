@@ -10,25 +10,19 @@ const tasks = [
   { label: 'Rendering Output', doneAt: 90 },
 ]
 
-// ── CSRF ──────────────────────────────────────────────
+// CSRF 
 function getCsrfToken() {
   const input = document.querySelector("input[name='csrfmiddlewaretoken']")
-  if (input) return input.value
-  const name = 'csrftoken'
-  for (let cookie of document.cookie.split(';')) {
-    const [key, value] = cookie.trim().split('=')
-    if (key === name) return decodeURIComponent(value)
-  }
-  return null
+  return input ? input.value : null
 }
 
-// ── PAGES ─────────────────────────────────────────────
+// PAGES
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
   document.getElementById(id).classList.add('active')
 }
 
-// ── VIDEO UPLOAD ──────────────────────────────────────
+// VIDEO UPLOAD 
 const uploadBox = document.getElementById('uploadBox')
 const videoInput = document.getElementById('videoFile')
 
@@ -71,7 +65,7 @@ function removeVideo() {
   document.getElementById('processBtn').disabled = true
 }
 
-// ── FACE UPLOAD ───────────────────────────────────────
+// FACE UPLOAD 
 function handleFaceUpload(e) {
   const files = Array.from(e.target.files)
   faceFiles = [...faceFiles, ...files]
@@ -115,7 +109,7 @@ function renderFaces() {
   grid.appendChild(addBtn)
 }
 
-// ── TASKS ─────────────────────────────────────────────
+// TASKS
 function renderTasks(progress) {
   const grid = document.getElementById('taskGrid')
   grid.innerHTML = ''
@@ -131,7 +125,7 @@ function renderTasks(progress) {
   })
 }
 
-// ── PROCESSING ────────────────────────────────────────
+// PROCESSING
 async function startProcessing() {
   showPage('page-processing')
   document.getElementById('restartBtn').style.display = 'block'
@@ -142,7 +136,6 @@ async function startProcessing() {
 
   try {
     // Fetch CSRF cookie first
-    await fetch('/api/csrf/', { credentials: 'same-origin' })
     const csrf = getCsrfToken()
 
     // Step 1 — Upload video
@@ -223,7 +216,7 @@ function showError(message) {
   document.getElementById('error-state').style.display = 'block'
 }
 
-// ── DOWNLOAD ──────────────────────────────────────────
+// DOWNLOAD
 async function handleDownload() {
   try {
     const res = await fetch(`/api/download/${encodeURIComponent(currentFileKey)}/`)
@@ -235,7 +228,7 @@ async function handleDownload() {
   }
 }
 
-// ── RESTART ───────────────────────────────────────────
+// RESTART 
 function handleRestart() {
   currentFileKey = null
   faceFiles = []
@@ -247,7 +240,6 @@ function handleRestart() {
 }
 
 
-// Initialise face grid on load
 document.addEventListener('DOMContentLoaded', () => {
   renderFaces()
 })

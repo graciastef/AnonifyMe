@@ -59,6 +59,11 @@
 </head>
 <body>
 
+  <form id="csrf-form" style="display: none;">
+    {% csrf_token %}
+  </form>
+
+
   <!-- Navbar -->
   <nav>
     <img src="{% static 'images/AnonifyMe_logo_transparent.png' %}" alt="AnonifyMe" style="height: 48px;" />
