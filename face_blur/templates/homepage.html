@@ -1,40 +1,224 @@
 {% load static %}
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Upload Video</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AnonifyMe</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100vh; background-color: #1a1d2e; color: #fff; font-family: sans-serif; }
+
+    nav { padding: 16px 32px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; gap: 10px; }
+    nav span { font-weight: 700; font-size: 24px; }
+
+    .main { max-width: 1200px; padding: 32px; margin: 0 auto; }
+
+    .card-dark { background-color: #252839; border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+
+    .upload-box { border: 2px dashed rgba(255,255,255,0.2); border-radius: 12px; padding: 48px 24px; text-align: center; cursor: pointer; margin-bottom: 16px; transition: border-color 0.2s; }
+    .upload-box:hover { border-color: #6C8EF5; background-color: rgba(108,142,245,0.05); }
+    .upload-box.dragging { border-color: #6C8EF5; background-color: rgba(108,142,245,0.05); }
+
+    .progress-bar-track { background-color: rgba(255,255,255,0.1); border-radius: 99px; height: 10px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 99px; transition: width 0.1s linear, background-color 0.5s; background-color: #EAD637; }
+
+    .task-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; }
+    .task-item { display: flex; align-items: center; gap: 12px; }
+    .task-item span { font-weight: 600; font-size: 14px; }
+
+    .face-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    .face-thumb { position: relative; }
+    .face-thumb img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 2px dashed rgba(255,255,255,0.2); }
+    .face-thumb .remove-btn { position: absolute; top: -6px; right: -6px; background: #ef4444; border: none; border-radius: 50%; width: 18px; height: 18px; color: #fff; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .add-face-btn { width: 72px; height: 72px; border: 2px dashed rgba(255,255,255,0.2); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-size: 22px; color: #9ca3af; }
+    .add-face-btn span { font-size: 11px; margin-top: 4px; }
+
+    .btn-primary-custom { width: 100%; padding: 16px; background-color: #5C6BC0; border: none; border-radius: 10px; color: #fff; font-weight: 600; font-size: 16px; cursor: pointer; }
+    .btn-primary-custom:disabled { background-color: #3a3d55; color: #9ca3af; cursor: not-allowed; }
+    .btn-restart { width: 100%; margin-top: 16px; padding: 14px; background-color: transparent; border: 2px solid rgba(255,255,255,0.2); border-radius: 10px; color: #9ca3af; font-weight: 600; font-size: 15px; cursor: pointer; }
+
+    .step-item { display: flex; align-items: flex-start; gap: 16px; padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    .step-item:last-child { border-bottom: none; }
+    .step-badge { min-width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+
+    .error-box { background-color: #252839; border-radius: 12px; padding: 32px; margin-bottom: 16px; text-align: center; }
+    .error-icon { width: 64px; height: 64px; border-radius: 50%; background-color: rgba(239,68,68,0.15); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; }
+    .error-tips { background-color: #1a1d2e; border-radius: 10px; padding: 16px; text-align: left; margin-bottom: 24px; }
+    .error-tip { display: flex; align-items: center; gap: 10px; font-size: 14px; margin-bottom: 10px; }
+    .error-tip:last-child { margin-bottom: 0; }
+
+    .label-sm { font-size: 12px; font-weight: 600; letter-spacing: 1px; color: #9ca3af; margin-bottom: 8px; }
+    .muted { color: #9ca3af; }
+
+    .page { display: none; }
+    .page.active { display: block; }
+  </style>
 </head>
 <body>
-  <h1>Upload Video</h1>
 
-  <form id="videoForm">
-    {% csrf_token %}
-    <input id="videoFile" name="file" type="file" accept="video/*" required />
-    <button type="submit">Upload</button>
-  </form>
+  <!-- Navbar -->
+  <nav>
+    <img src="{% static 'images/AnonifyMe_logo_transparent.png' %}" alt="AnonifyMe" style="height: 48px;" />
+    <span>AnonifyMe</span>
+  </nav>
 
-  <p id="videoResult"></p>
+  <div class="main">
+    <div class="row g-5">
 
-  <h2>Upload Whitelist Images</h2>
-  <form id="whitelistForm">
-    <input type="file" id="whitelistFiles" multiple accept="image/*" required />
-    <br><br>
-    <button type="submit">Upload Whitelist</button>
-  </form>
+      <!-- LEFT COLUMN -->
+      <div class="col-12 col-lg-6">
 
-  <p id="whitelistResult"></p>
+        <!-- PAGE 1 & 2: Upload / Preview -->
+        <div id="page-upload" class="page active">
+          <h1 style="font-size: 32px; font-weight: 700; line-height: 1.3; margin-bottom: 16px;">
+            <span style="color: #6C8EF5;">Blur faces in your video</span><br />automatically with AI
+          </h1>
+          <p class="muted" style="margin-bottom: 32px; line-height: 1.7;">
+            Upload any video and our AI will detect and blur all faces.
+            Optionally whitelist specific people to keep their faces visible.
+          </p>
 
-  <h2>Processing Progress</h2>
-  <div id="progressContainer" style="display:none;">
-    <progress id="progressBar" value="0" max="100" style="width:100%"></progress>
-    <p id="progressText">0%</p>
-    <p id="etaText"></p>
+          <!-- Video upload box -->
+          <div id="upload-section">
+            <p class="label-sm">VIDEO FILE</p>
+            <div class="upload-box" id="uploadBox">
+              <input type="file" id="videoFile" name="file" accept="video/*" hidden />
+              <i class="bi bi-upload" style="font-size: 28px; display: block; margin-bottom: 12px; color: #9ca3af;"></i>
+              <p style="font-weight: 600; margin-bottom: 4px;">Click to browse</p>
+              <p class="muted" style="font-size: 13px;">MP4, MOV, WebM supported</p>
+            </div>
+          </div>
+
+          <!-- Video preview -->
+          <div id="preview-section" style="display: none; margin-bottom: 16px;">
+            <p class="label-sm">VIDEO FILE</p>
+            <video id="videoPreview" controls style="width: 100%; border-radius: 12px; background-color: #000;"></video>
+            <button onclick="removeVideo()" style="margin-top: 8px; background: none; border: none; color: #9ca3af; font-size: 13px; cursor: pointer;">
+              Remove video
+            </button>
+          </div>
+
+          <!-- Exclude faces -->
+          <div class="card-dark">
+            <p style="font-weight: 600; margin-bottom: 4px;">Exclude Faces from Blurring</p>
+            <p class="muted" style="font-size: 13px; margin-bottom: 16px;">Upload photos of people whose faces should remain visible</p>
+            <div class="face-grid" id="faceGrid">
+              <div class="add-face-btn" id="addFaceBtn">
+                <input type="file" id="faceFiles" accept="image/*" multiple hidden onchange="handleFaceUpload(event)" />
+                <span>Add Face</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Process button -->
+          <button class="btn-primary-custom" id="processBtn" onclick="startProcessing()" disabled>
+            Process Video
+          </button>
+        </div>
+
+        <!-- PAGE 3: Processing -->
+        <div id="page-processing" class="page">
+
+          <!-- Progress bar -->
+          <div class="card-dark">
+            <p id="progressLabel" style="font-weight: 600; margin-bottom: 16px;">Processing Video... (0%)</p>
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill" id="progressFill" style="width: 0%;"></div>
+            </div>
+            <p id="etaText" class="muted" style="font-size: 13px; margin-top: 8px; margin-bottom: 0; display: none;"></p>
+          </div>
+
+          <!-- Tasks checklist -->
+          <div class="card-dark" id="tasksCard">
+            <div class="task-grid" id="taskGrid"></div>
+          </div>
+
+          <!-- Error state -->
+          <div id="error-state" style="display: none;">
+            <div class="error-box">
+              <div class="error-icon">
+                <i class="bi bi-x-lg" style="font-size: 28px; color: #ef4444;"></i>
+              </div>
+              <p style="font-weight: 700; font-size: 18px; margin-bottom: 8px;">Something went wrong</p>
+              <p id="errorMessage" class="muted" style="font-size: 14px; margin-bottom: 24px; line-height: 1.6;"></p>
+              <div class="error-tips">
+                <p class="muted" style="font-size: 13px; font-weight: 600; margin-bottom: 12px;">WHAT YOU CAN TRY</p>
+                <div class="error-tip"><i class="bi bi-arrow-clockwise" style="color: #6C8EF5;"></i> Try uploading the video again</div>
+                <div class="error-tip"><i class="bi bi-file-earmark-check" style="color: #6C8EF5;"></i> Make sure the file is MP4, MOV or WebM</div>
+                <div class="error-tip"><i class="bi bi-hdd" style="color: #6C8EF5;"></i> Check the file is not too large</div>
+                <div class="error-tip"><i class="bi bi-wifi" style="color: #6C8EF5;"></i> Check your internet connection</div>
+              </div>
+              <button class="btn-primary-custom" onclick="handleRestart()">Try Again</button>
+            </div>
+          </div>
+
+          <!-- Done state -->
+          <div id="done-state" style="display: none;">
+            <video id="resultPreview" controls style="width: 100%; border-radius: 12px; background-color: #000; margin-bottom: 16px;"></video>
+            <button class="btn-primary-custom" onclick="handleDownload()">Download Video</button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="col-12 col-lg-6">
+        <p class="label-sm" style="margin-bottom: 16px;">HOW IT WORKS</p>
+
+        <!-- Steps -->
+        <div class="card-dark" style="padding: 8px;">
+          <div class="step-item">
+            <div class="step-badge" style="background-color: #4CAF50;">1</div>
+            <div>
+              <p style="font-weight: 600; margin-bottom: 4px;">Upload Your Video</p>
+              <p class="muted" style="font-size: 13px; line-height: 1.5;">Support for MP4, MOV, WebM. Resolution up to 4K.</p>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-badge" style="background-color: #8B7355;">2</div>
+            <div>
+              <p style="font-weight: 600; margin-bottom: 4px;">Whitelist Faces (optional)</p>
+              <p class="muted" style="font-size: 13px; line-height: 1.5;">Upload photos of people whose faces should stay visible. Everyone else gets blurred.</p>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-badge" style="background-color: #8B4513;">3</div>
+            <div>
+              <p style="font-weight: 600; margin-bottom: 4px;">Click Process Video</p>
+              <p class="muted" style="font-size: 13px; line-height: 1.5;">Our model detects and blurs faces frame-by-frame throughout the entire video.</p>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-badge" style="background-color: #5C6BC0;">4</div>
+            <div>
+              <p style="font-weight: 600; margin-bottom: 4px;">Review and Download Result</p>
+              <p class="muted" style="font-size: 13px; line-height: 1.5;">Get your privacy-protected video in the same quality as the original. File format is .mp4.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy note -->
+        <div class="card-dark" style="display: flex; gap: 16px; align-items: flex-start;">
+          <i class="bi bi-info-circle" style="font-size: 20px; color: #9ca3af; margin-top: 2px;"></i>
+          <div>
+            <p style="font-weight: 600; margin-bottom: 6px;">Privacy First</p>
+            <p class="muted" style="font-size: 13px; line-height: 1.6;">Videos are processed securely and not stored permanently. All data is deleted in 2 hours after processing.</p>
+          </div>
+        </div>
+
+        <!-- Restart button -->
+        <button class="btn-restart" id="restartBtn" style="display: none;" onclick="handleRestart()">
+          Start Over
+        </button>
+
+      </div>
+    </div>
   </div>
 
-  <button id="downloadBtn" disabled>Download Processed Video</button>
-
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{% static 'js/upload.js' %}"></script>
 </body>
 </html>
