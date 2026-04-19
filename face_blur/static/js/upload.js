@@ -1,139 +1,245 @@
-const form = document.getElementById("uploadForm");
-const fileInput = document.getElementById("videoFile");
-const statusBox = document.getElementById("statusBox");
+let currentFileKey = null
+let faceFiles = []
+let currentVideoFile = null
 
+const tasks = [
+  { label: 'Uploading Video to AI', doneAt: 10 },
+  { label: 'Detecting All Faces', doneAt: 30 },
+  { label: 'Matching Whitelisted Face(s)', doneAt: 50 },
+  { label: 'Applying Blur', doneAt: 70 },
+  { label: 'Rendering Output', doneAt: 90 },
+]
+
+// CSRF 
 function getCsrfToken() {
-  const input = document.querySelector("input[name='csrfmiddlewaretoken']");
-  return input ? input.value : null;
+  const input = document.querySelector("input[name='csrfmiddlewaretoken']")
+  return input ? input.value : null
 }
 
-let currentFileKey = null;
+// PAGES
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+  document.getElementById(id).classList.add('active')
+}
 
-// Video Upload
-const videoForm = document.getElementById("videoForm");
-const videoResult = document.getElementById("videoResult");
+// VIDEO UPLOAD 
+const uploadBox = document.getElementById('uploadBox')
+const videoInput = document.getElementById('videoFile')
 
-videoForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+uploadBox.addEventListener('click', () => videoInput.click())
 
-  const file = fileInput.files[0];
-  if (!file) {
-    statusBox.textContent = "Please select a file.";
-    return;
-  }
+uploadBox.addEventListener('dragover', (e) => {
+  e.preventDefault()
+  uploadBox.classList.add('dragging')
+})
 
-  const csrfToken = getCsrfToken();
-  if (!csrfToken) {
-    statusBox.textContent = "CSRF token not found in page.";
-    return;
-  }
+uploadBox.addEventListener('dragleave', () => {
+  uploadBox.classList.remove('dragging')
+})
 
-  const formData = new FormData();
-  formData.append("file", file);
+uploadBox.addEventListener('drop', (e) => {
+  e.preventDefault()
+  uploadBox.classList.remove('dragging')
+  const file = e.dataTransfer.files[0]
+  if (file) setVideoFile(file)
+})
+
+videoInput.addEventListener('change', (e) => {
+  if (e.target.files[0]) setVideoFile(e.target.files[0])
+})
+
+function setVideoFile(file) {
+  currentVideoFile = file
+  const preview = document.getElementById('videoPreview')
+  preview.src = URL.createObjectURL(file)
+  document.getElementById('upload-section').style.display = 'none'
+  document.getElementById('preview-section').style.display = 'block'
+  document.getElementById('processBtn').disabled = false
+}
+
+function removeVideo() {
+  currentVideoFile = null
+  document.getElementById('videoPreview').src = ''
+  document.getElementById('upload-section').style.display = 'block'
+  document.getElementById('preview-section').style.display = 'none'
+  document.getElementById('processBtn').disabled = true
+}
+
+// FACE UPLOAD 
+function handleFaceUpload(e) {
+  const files = Array.from(e.target.files)
+  faceFiles = [...faceFiles, ...files]
+  renderFaces()
+}
+
+function removeFace(index) {
+  faceFiles = faceFiles.filter((_, i) => i !== index)
+  renderFaces()
+}
+
+function renderFaces() {
+  const grid = document.getElementById('faceGrid')
+  grid.innerHTML = ''
+
+  faceFiles.forEach((face, i) => {
+    const div = document.createElement('div')
+    div.className = 'face-thumb'
+    div.innerHTML = `
+      <img src="${URL.createObjectURL(face)}" alt="face" />
+      <button class="remove-btn" onclick="removeFace(${i})">×</button>
+    `
+    grid.appendChild(div)
+  })
+
+  // Add face button
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.multiple = true
+  input.style.display = 'none'
+  input.id = 'faceFilesInput'
+  input.onchange = handleFaceUpload
+
+  const addBtn = document.createElement('div')
+  addBtn.className = 'add-face-btn'
+  addBtn.innerHTML = `+ <span>Add Face</span>`
+  addBtn.onclick = () => input.click()
+
+  grid.appendChild(input)
+  grid.appendChild(addBtn)
+}
+
+// TASKS
+function renderTasks(progress) {
+  const grid = document.getElementById('taskGrid')
+  grid.innerHTML = ''
+  tasks.forEach(task => {
+    const done = progress >= task.doneAt
+    const div = document.createElement('div')
+    div.className = 'task-item'
+    div.innerHTML = `
+      <i class="bi ${done ? 'bi-check-circle-fill' : 'bi-circle'}" style="font-size: 22px; color: ${done ? '#6C8EF5' : '#9ca3af'};"></i>
+      <span>${task.label}</span>
+    `
+    grid.appendChild(div)
+  })
+}
+
+// PROCESSING
+async function startProcessing() {
+  showPage('page-processing')
+  document.getElementById('restartBtn').style.display = 'block'
+  document.getElementById('error-state').style.display = 'none'
+  document.getElementById('done-state').style.display = 'none'
+  document.getElementById('tasksCard').style.display = 'block'
+  updateProgress(0)
 
   try {
-    const response = await fetch("/api/videos/", {
-      method: "POST",
-      body: formData,
-      headers: {
-        "X-CSRFToken": csrfToken
-      },
-      credentials: "same-origin"
-    });
+    // Fetch CSRF cookie first
+    const csrf = getCsrfToken()
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error);
-    currentFileKey = data.file_key;
+    // Step 1 — Upload video
+    const videoFormData = new FormData()
+    videoFormData.append('file', currentVideoFile)
 
-    videoResult.textContent = JSON.stringify(data, null, 2);
-  } catch (error) {
-    videoResult.textContent = "Error: " + error.message;
-  }
-});
+    const videoRes = await fetch('/api/videos/', {
+      method: 'POST',
+      body: videoFormData,
+      headers: { 'X-CSRFToken': csrf },
+      credentials: 'same-origin'
+    })
+    const videoData = await videoRes.json()
+    if (!videoRes.ok) throw new Error(videoData.error)
+    currentFileKey = videoData.file_key
 
-// Whitelist Upload
+    // Step 2 — Upload whitelist faces
+    const whitelistFormData = new FormData()
+    whitelistFormData.append('file_key', currentFileKey)
+    faceFiles.forEach(face => whitelistFormData.append('files', face))
 
-const whitelistForm = document.getElementById("whitelistForm");
-const whitelistResult = document.getElementById("whitelistResult");
+    const whitelistRes = await fetch('/api/whitelist-images/', {
+      method: 'POST',
+      body: whitelistFormData,
+      headers: { 'X-CSRFToken': csrf },
+      credentials: 'same-origin'
+    })
+    const whitelistData = await whitelistRes.json()
+    if (!whitelistRes.ok) throw new Error(whitelistData.error)
 
-whitelistForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  const files = document.getElementById("whitelistFiles").files;
-
-  const formData = new FormData();
-  formData.append("file_key", currentFileKey);
-
-  for (let i = 0; i < files.length; i++) {
-    formData.append("files", files[i]);
-  }
-
-  try {
-    const res = await fetch("/api/whitelist-images/", {
-      method: "POST",
-      body: formData,
-      headers: {
-        "X-CSRFToken": getCsrfToken(),
-      },
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error);
-
-    whitelistResult.textContent = JSON.stringify(data, null, 2);
-    startProgressStream(currentFileKey)
-
-  } catch (err) {
-    whitelistResult.textContent = "Error: " + err.message;
-  }
-});
-
-
-// get progress
-function startProgressStream(fileKey) {
-    const container = document.getElementById("progressContainer");
-    const bar = document.getElementById("progressBar");
-    const text = document.getElementById("progressText");
-    const eta = document.getElementById("etaText");
-
-    container.style.display = "block";
-
-    const source = new EventSource(`/api/progress/${fileKey}/`);
+    // Step 3 — Progress stream
+    const source = new EventSource(`/api/progress/${currentFileKey}/`)
     source.onmessage = (e) => {
-        const { percentage, eta: etaStr } = JSON.parse(e.data);
-        bar.value = percentage;
-        text.textContent = `${percentage}%`;
-        eta.textContent = etaStr ? `ETA: ${etaStr}` : "";
-
-        if (percentage >= 100) {
-            source.close();
-            text.textContent = "Processing complete!";
-            eta.textContent = "";
-            downloadBtn.disabled = false;
-        }
-    };
-
+      const { percentage, eta } = JSON.parse(e.data)
+      updateProgress(percentage, eta)
+      if (percentage >= 100) {
+        source.close()
+        showDone()
+      }
+    }
     source.onerror = () => {
-        source.close();
-        text.textContent = "Connection lost.";
-    };
-}
-
-downloadBtn.addEventListener("click", async () => {
-  if (!currentFileKey) return;
-
-  try {
-    const res = await fetch(`/api/download/${encodeURIComponent(currentFileKey)}/`);
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || "Download failed");
+      source.close()
+      showError('Connection to server lost. Please try again.')
     }
 
-    window.location.href = data.download_url;
   } catch (err) {
-    console.error(err);
-    alert(err.message);
+    showError(err.message)
   }
-});
+}
+
+function updateProgress(percentage, eta) {
+  document.getElementById('progressFill').style.width = `${percentage}%`
+  document.getElementById('progressFill').style.backgroundColor = percentage >= 100 ? '#22c55e' : '#EAD637'
+  document.getElementById('progressLabel').textContent = `Processing Video... (${percentage}%)`
+  renderTasks(percentage)
+  const etaEl = document.getElementById('etaText')
+  if (eta) {
+    etaEl.textContent = `ETA: ${eta}`
+    etaEl.style.display = 'block'
+  } else {
+    etaEl.style.display = 'none'
+  }
+}
+
+function showDone() {
+  document.getElementById('progressLabel').textContent = 'Processing Complete!'
+  document.getElementById('progressFill').style.backgroundColor = '#22c55e'
+  document.getElementById('done-state').style.display = 'block'
+  document.getElementById('resultPreview').src = URL.createObjectURL(currentVideoFile)
+}
+
+function showError(message) {
+  document.getElementById('tasksCard').style.display = 'none'
+  document.getElementById('progressFill').style.width = '100%'
+  document.getElementById('progressFill').style.backgroundColor = '#ef4444'
+  document.getElementById('progressLabel').textContent = 'Processing Failed'
+  document.getElementById('errorMessage').textContent = message
+  document.getElementById('error-state').style.display = 'block'
+}
+
+// DOWNLOAD
+async function handleDownload() {
+  try {
+    const res = await fetch(`/api/download/${encodeURIComponent(currentFileKey)}/`)
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Download failed')
+    window.location.href = data.download_url
+  } catch (err) {
+    showError(err.message)
+  }
+}
+
+// RESTART 
+function handleRestart() {
+  currentFileKey = null
+  faceFiles = []
+  currentVideoFile = null
+  document.getElementById('restartBtn').style.display = 'none'
+  removeVideo()
+  renderFaces()
+  showPage('page-upload')
+}
+
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderFaces()
+})
