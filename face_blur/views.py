@@ -132,9 +132,9 @@ def progress_stream(request, file_key: str):
     # check if file exists
     try:
         record = FileMetadata.objects.get(file_key=file_key)
-        if record.status != FileMetadata.Status.WHITELIST_UPLOADED:
+        if record.status not in [FileMetadata.Status.UPLOADED, FileMetadata.Status.WHITELIST_UPLOADED]:
             raise RuntimeError(
-                f"Video cannot be processed: expected status '{FileMetadata.Status.WHITELIST_UPLOADED}', got '{record.status}'."
+                f"Video cannot be processed: expected status 'UPLOADED' or 'WHITELIST_UPLOADED', got '{record.status}'."
             )
     except FileMetadata.DoesNotExist:
         raise FileNotFoundError(f"No FileMetadata record found for file_key={file_key}")
@@ -143,7 +143,7 @@ def progress_stream(request, file_key: str):
 
     def event_stream():
         while True:
-            task.progress_event.wait(timeout=30)
+            task.progress_event.wait(timeout=10)
             task.progress_event.clear()
             yield f"data: {json.dumps(task.progress)}\n\n"
             if task.progress["percentage"] >= 100:

@@ -5,7 +5,7 @@ let currentVideoFile = null
 const tasks = [
   { label: 'Uploading Video to AI', doneAt: 10 },
   { label: 'Detecting All Faces', doneAt: 30 },
-  { label: 'Matching Whitelisted Face(s)', doneAt: 50 },
+  { label: 'Checking Whitelist', doneAt: 50 },
   { label: 'Applying Blur', doneAt: 70 },
   { label: 'Rendering Output', doneAt: 90 },
 ]
@@ -152,19 +152,21 @@ async function startProcessing() {
     if (!videoRes.ok) throw new Error(videoData.error)
     currentFileKey = videoData.file_key
 
-    // Step 2 — Upload whitelist faces
-    const whitelistFormData = new FormData()
-    whitelistFormData.append('file_key', currentFileKey)
-    faceFiles.forEach(face => whitelistFormData.append('files', face))
+    // Step 2 — Upload whitelist faces (if any)
+    if (faceFiles.length > 0) {
+      const whitelistFormData = new FormData()
+      whitelistFormData.append('file_key', currentFileKey)
+      faceFiles.forEach(face => whitelistFormData.append('files', face))
 
-    const whitelistRes = await fetch('/api/whitelist-images/', {
-      method: 'POST',
-      body: whitelistFormData,
-      headers: { 'X-CSRFToken': csrf },
-      credentials: 'same-origin'
-    })
-    const whitelistData = await whitelistRes.json()
-    if (!whitelistRes.ok) throw new Error(whitelistData.error)
+      const whitelistRes = await fetch('/api/whitelist-images/', {
+        method: 'POST',
+        body: whitelistFormData,
+        headers: { 'X-CSRFToken': csrf },
+        credentials: 'same-origin'
+      })
+      const whitelistData = await whitelistRes.json()
+      if (!whitelistRes.ok) throw new Error(whitelistData.error)
+    }
 
     // Step 3 — Progress stream
     const source = new EventSource(`/api/progress/${currentFileKey}/`)
