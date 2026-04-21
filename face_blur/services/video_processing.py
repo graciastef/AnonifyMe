@@ -322,16 +322,12 @@ def blur_faces(
     for frame_idx, (frame_file, frame_dets) in enumerate(zip(frame_files, tracked_detections)):
         frame = cv2.imread(os.path.join(frames_dir, frame_file))
         for det_idx, det in enumerate(frame_dets):
+            x1, y1, x2, y2 = det["bbox"]
             crop_path = alignment.get((frame_idx, det_idx))
-            if crop_path is None:
-                continue
-            crop = cv2.imread(crop_path)
-            if crop is None:
-                continue
-            if face_recognizer.is_whitelisted(crop):
+            crop = cv2.imread(crop_path) if crop_path else None
+            if crop is not None and face_recognizer.is_whitelisted(crop):
                 faces_whitelisted += 1
             else:
-                x1, y1, x2, y2 = det["bbox"]
                 frame = _apply_blur(frame, x1, y1, x2, y2)
                 faces_blurred += 1
         writer.write(frame)
