@@ -107,6 +107,14 @@ DATABASES = {
     }
 }
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://*.lhr.life",
+]
+
+CSRF_ALLOWED_ORIGINS = [
+    "https://*.lhr.life",
+]
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
