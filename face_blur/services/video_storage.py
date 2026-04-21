@@ -6,14 +6,17 @@ from django.conf import settings
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, ContentSettings, BlobSasPermissions, generate_blob_sas
 
-from ..models import FileMetadata
+_blob_service_client = None
 
-credential = DefaultAzureCredential()
 
-blob_service_client = BlobServiceClient(
-    account_url=settings.AZURE_BLOB_URL,
-    credential=credential
-)
+def _get_client() -> BlobServiceClient:
+    global _blob_service_client
+    if _blob_service_client is None:
+        _blob_service_client = BlobServiceClient(
+            account_url=settings.AZURE_BLOB_URL,
+            credential=DefaultAzureCredential(),
+        )
+    return _blob_service_client
 
 def build_blob_path(file_key: str, filename: str = None, get_whitelist: bool = False, upload: bool = True) -> str:
     if not file_key:
@@ -35,7 +38,7 @@ def build_url(blob_path: str) -> str:
     return f"{settings.AZURE_BLOB_URL}/{settings.AZURE_CONTAINER_NAME}/{blob_path}"
 
 def upload_to_blob_storage(uploaded_file, file_key: str, get_whitelist: bool = False) -> str:
-    container_client = blob_service_client.get_container_client(settings.AZURE_CONTAINER_NAME)
+    container_client = _get_client().get_container_client(settings.AZURE_CONTAINER_NAME)
     blob_path = build_blob_path(file_key, filename=uploaded_file.name, get_whitelist=get_whitelist)
     blob_client = container_client.get_blob_client(blob_path)
 
@@ -52,7 +55,9 @@ def upload_to_blob_storage(uploaded_file, file_key: str, get_whitelist: bool = F
     return build_url(build_blob_path(file_key))  # return folder URL
 
 
-def upload_video_to_blob(uploaded_file) -> FileMetadata:
+def upload_video_to_blob(uploaded_file):
+    from ..models import FileMetadata
+
     file_key = uuid.uuid4()
     folder_url = upload_to_blob_storage(uploaded_file, file_key)
 
@@ -78,7 +83,7 @@ def upload_local_file_to_blob(
     content_type: str = "video/mp4",
 ) -> str:
     container_name = settings.AZURE_CONTAINER_NAME
-    container_client = blob_service_client.get_container_client(container_name)
+    container_client = _get_client().get_container_client(container_name)
 
     filename = os.path.basename(local_file_path)
     blob_path = build_blob_path(file_key, filename=filename, upload=False)
@@ -100,7 +105,9 @@ def upload_local_file_to_blob(
     return blob_url, blob_path
 
 
-def upload_image_to_blob(whitelist_images, file_key: str) -> FileMetadata:
+def upload_image_to_blob(whitelist_images, file_key: str):
+    from ..models import FileMetadata
+
     try:
         record = FileMetadata.objects.get(file_key=file_key)
         if record.status != FileMetadata.Status.UPLOADED:
@@ -122,7 +129,7 @@ def upload_image_to_blob(whitelist_images, file_key: str) -> FileMetadata:
 # ── download ──────────────────────────────────────────────────────────────────
 
 def download_blob_by_name(file_key: str, file_name: str, local_dir: str, get_whitelisted: bool = False) -> str:
-    container_client = blob_service_client.get_container_client(settings.AZURE_CONTAINER_NAME)
+    container_client = _get_client().get_container_client(settings.AZURE_CONTAINER_NAME)
     blob_path = build_blob_path(file_key, filename=file_name, get_whitelist=get_whitelisted)
     blob_client = container_client.get_blob_client(blob_path)
 
@@ -140,7 +147,7 @@ def download_blob_by_name(file_key: str, file_name: str, local_dir: str, get_whi
 
 
 def download_blobs(file_key: str, local_dir: str, get_whitelisted: bool = True) -> list[str]:
-    container_client = blob_service_client.get_container_client(settings.AZURE_CONTAINER_NAME)
+    container_client = _get_client().get_container_client(settings.AZURE_CONTAINER_NAME)
     prefix = build_blob_path(file_key, get_whitelist=get_whitelisted)
 
     os.makedirs(local_dir, exist_ok=True)
@@ -172,7 +179,7 @@ def generate_download_sas_url(blob_path: str, expires_in_minutes: int = 63) -> s
     expiry = now + timedelta(minutes=expires_in_minutes)
 
     # 1. Ask Azure for a user delegation key using Entra-authenticated client
-    user_delegation_key = blob_service_client.get_user_delegation_key(
+    user_delegation_key = _get_client().get_user_delegation_key(
         key_start_time=now,
         key_expiry_time=expiry,
     )

@@ -5,6 +5,7 @@ from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.shortcuts import render
 
+from face_blur.models import FileMetadata
 from face_blur.services.video_processing import trigger_video_processing, VideoProcessingTask
 from face_blur.services.video_storage import *
 
