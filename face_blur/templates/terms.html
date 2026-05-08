@@ -1,0 +1,80 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Terms & Conditions – AnonifyMe</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { min-height: 100vh; background-color: #1a1d2e; color: #fff; font-family: sans-serif; }
+
+    nav { padding: 16px 32px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; gap: 10px; }
+    nav span { font-weight: 700; font-size: 24px; }
+
+    .main { max-width: 720px; padding: 48px 32px; margin: 0 auto; }
+    .card-dark { background-color: #252839; border-radius: 12px; padding: 32px; margin-bottom: 16px; }
+    .muted { color: #9ca3af; }
+    .label-sm { font-size: 12px; font-weight: 600; letter-spacing: 1px; color: #9ca3af; margin-bottom: 8px; }
+
+    .section-title { color: #fff; font-weight: 600; font-size: 15px; margin-bottom: 8px; margin-top: 24px; }
+    .section-title:first-child { margin-top: 0; }
+    p { color: #9ca3af; font-size: 14px; line-height: 1.8; margin-bottom: 0; }
+    ul { color: #9ca3af; font-size: 14px; line-height: 1.8; padding-left: 20px; }
+    ul li { margin-bottom: 6px; }
+
+    .back-btn { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; color: #9ca3af; font-size: 14px; cursor: pointer; margin-bottom: 24px; padding: 0; }
+    .back-btn:hover { color: #fff; }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav>
+    <img src="{% static 'images/AnonifyMe_logo_transparent.png' %}" alt="AnonifyMe" style="height: 48px;" />
+    <span>AnonifyMe</span>
+  </nav>
+
+  <div class="main">
+
+    <button class="back-btn" onclick="history.back()">
+      <i class="bi bi-arrow-left"></i> Back
+    </button>
+
+    <p class="label-sm">LEGAL</p>
+    <h1 style="font-size: 28px; font-weight: 700; margin-bottom: 8px;">Terms & Conditions</h1>
+    <p class="muted" style="font-size: 13px; margin-bottom: 32px;">Last updated: May 2025</p>
+
+    <div class="card-dark">
+
+      <p class="section-title">1. Data Storage & Retention</p>
+      <p>Your uploaded video and any whitelist face images are stored temporarily on our secure servers solely for the purpose of processing. All data is <strong style="color: #fff;">automatically deleted within 2 hours</strong> of upload, regardless of whether processing completes successfully.</p>
+
+      <p class="section-title">2. Extended Retention Conditions</p>
+      <p style="margin-bottom: 8px;">In the following circumstances, your data may be retained;
+      <ul>
+        <li>Processing fails due to a server error and requires investigation</li>
+        <li>A dispute or support request is raised regarding your session</li>
+        <li>Suspected misuse or abuse of the service is detected</li>
+        <li>One or both Face Detection/Recognition model underperforms on certain frames in the video</li>
+        <li>Whitelisted faces are blurred in some frames of the video</li>
+      </ul>
+
+      <p class="section-title">3. How Your Data Is Used</p>
+      <p>Your data is used exclusively for face detection and blurring. We do not share, sell, or use your video content for training AI models or any other purpose.</p>
+
+      <p class="section-title">4. Security</p>
+      <p>All uploads are transmitted over encrypted connections. Stored files are access-controlled and not publicly accessible.</p>
+
+      <p class="section-title">5. Your Consent</p>
+      <p>By checking the box and proceeding, you confirm you have the right to process the video content you upload and consent to the temporary storage described above.</p>
+
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

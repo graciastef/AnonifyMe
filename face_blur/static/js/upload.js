@@ -48,13 +48,22 @@ videoInput.addEventListener('change', (e) => {
   if (e.target.files[0]) setVideoFile(e.target.files[0])
 })
 
+function checkCanProcess() {
+  const tcChecked = document.getElementById('tcCheckbox')?.checked
+  document.getElementById('processBtn').disabled = !currentVideoFile || !tcChecked
+}
+
+function handleTcChange() {
+  checkCanProcess()
+}
+
 function setVideoFile(file) {
   currentVideoFile = file
   const preview = document.getElementById('videoPreview')
   preview.src = URL.createObjectURL(file)
   document.getElementById('upload-section').style.display = 'none'
   document.getElementById('preview-section').style.display = 'block'
-  document.getElementById('processBtn').disabled = false
+  checkCanProcess() 
 }
 
 function removeVideo() {
@@ -62,7 +71,7 @@ function removeVideo() {
   document.getElementById('videoPreview').src = ''
   document.getElementById('upload-section').style.display = 'block'
   document.getElementById('preview-section').style.display = 'none'
-  document.getElementById('processBtn').disabled = true
+  checkCanProcess() 
 }
 
 // FACE UPLOAD 
@@ -235,6 +244,8 @@ function handleRestart() {
   currentFileKey = null
   faceFiles = []
   currentVideoFile = null
+  const tc = document.getElementById('tcCheckbox')
+  if (tc) tc.checked = false          // ← add this line
   document.getElementById('restartBtn').style.display = 'none'
   removeVideo()
   renderFaces()
