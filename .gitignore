@@ -5,3 +5,7 @@ __pycache__/
 .env
 videos/*
 models/*
+.DS_Store
+retraining/dataset/*
+insightface_repo/
+retraining_data/*

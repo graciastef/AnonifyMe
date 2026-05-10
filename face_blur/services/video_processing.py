@@ -79,6 +79,7 @@ def apply_blur(frame, x1, y1, x2, y2):
     return frame
 
 
+
 # ── Pipeline step functions ───────────────────────────────────────────────────
 
 def fetch_video(file_key: str, filename: str, in_dir: str):
@@ -134,7 +135,7 @@ def extract_frames(video_path: str, frames_dir: str):
     return frames_dir
 
 
-def detect_faces(frames_dir: str, total_frames: int, device_id: int = 0):
+def detect_faces(frames_dir: str, total_frames: int, file_key: str, device_id: int = 0):
     import os
     import pickle
     import numpy as np
@@ -142,6 +143,9 @@ def detect_faces(frames_dir: str, total_frames: int, device_id: int = 0):
     import onnxruntime as ort
     from insightface.app import FaceAnalysis
     from clearml import Task
+
+    failure_conf_min = 0.3
+    failure_conf_max = 0.7
 
     available = ort.get_available_providers()
     if "CUDAExecutionProvider" in available:
@@ -156,19 +160,72 @@ def detect_faces(frames_dir: str, total_frames: int, device_id: int = 0):
 
     frame_files = sorted(f for f in os.listdir(frames_dir) if f.startswith("frame_"))
     raw_detections = []
+    failure_cases = []
+
     for frame_file in frame_files:
         frame = cv2.imread(os.path.join(frames_dir, frame_file))
         faces = face_app.get(frame)
         frame_dets = []
         for face in faces:
             x1, y1, x2, y2 = face.bbox.astype(int)
-            frame_dets.append({"xywh": [x1, y1, x2 - x1, y2 - y1], "conf": float(face.det_score), "kps": face.kps})
+            conf = float(face.det_score)
+            frame_dets.append({"xywh": [x1, y1, x2 - x1, y2 - y1], "conf": conf, "kps": face.kps})
+            if failure_conf_min <= conf < failure_conf_max:
+                failure_cases.append({"frame": frame.copy(), "bbox": [int(x1), int(y1), int(x2), int(y2)], "conf": conf})
         raw_detections.append(frame_dets)
 
     all_confs = [d["conf"] for frame in raw_detections for d in frame]
     logger = Task.current_task().get_logger()
     logger.report_single_value("avg_detection_confidence", float(np.mean(all_confs)) if all_confs else 0.0)
     logger.report_single_value("total_faces_detected", len(all_confs))
+    logger.report_single_value("failure_cases_captured", len(failure_cases))
+
+    # Inline failure case upload (module-level helpers not accessible in pipeline steps)
+    if failure_cases:
+        import json as _json
+        import time
+        import django
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+        django.setup()
+        from django.conf import settings as _s
+        from azure.identity import DefaultAzureCredential
+        from azure.storage.blob import BlobServiceClient, ContentSettings
+        from azure.core.exceptions import ResourceNotFoundError
+
+        failure_cases_prefix = "training/failure_cases"
+        annotations_blob     = f"{failure_cases_prefix}/annotations.jsonl"
+
+        _svc = BlobServiceClient(account_url=_s.AZURE_BLOB_URL, credential=DefaultAzureCredential())
+        container = _svc.get_container_client(_s.AZURE_CONTAINER_NAME)
+        ts = int(time.time())
+        new_lines = []
+
+        for i, case in enumerate(failure_cases):
+            stem = f"{file_key}_{ts}_{i:04d}"
+            _, encoded = cv2.imencode(".jpg", case["frame"])
+            img_blob = f"{failure_cases_prefix}/images/{stem}.jpg"
+            container.get_blob_client(img_blob).upload_blob(
+                encoded.tobytes(),
+                overwrite=True,
+                content_settings=ContentSettings(content_type="image/jpeg"),
+            )
+            new_lines.append(_json.dumps({"image": f"{stem}.jpg", "bboxes": [case["bbox"]], "conf": case["conf"]}))
+
+        existing = b""
+        try:
+            existing = container.get_blob_client(annotations_blob).download_blob().readall()
+        except ResourceNotFoundError:
+            pass
+
+        updated = existing.rstrip(b"\n")
+        if updated:
+            updated += b"\n"
+        updated += ("\n".join(new_lines) + "\n").encode()
+        container.get_blob_client(annotations_blob).upload_blob(
+            updated,
+            overwrite=True,
+            content_settings=ContentSettings(content_type="application/jsonl"),
+        )
 
     out_path = os.path.join(frames_dir, "raw_detections.pkl")
     with open(out_path, "wb") as f:
@@ -399,7 +456,7 @@ class VideoProcessingTask:
 
         pipe = PipelineController(
             name=f"process-{filename}",
-            project="face-blur-pipeline",
+            project="anonifyme-video-processing",
             version="1.0",
             add_pipeline_tags=False,
         )
@@ -425,6 +482,7 @@ class VideoProcessingTask:
             function_kwargs={
                 "frames_dir": "${extract_frames.frames_dir}",
                 "total_frames": "${fetch_video.total_frames}",
+                "file_key": file_key,
                 "device_id": device_id,
             },
             function_return=["raw_detections_path"],
