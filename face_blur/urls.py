@@ -10,5 +10,6 @@ urlpatterns = [
 
     # Frontend pages
     path("", views.home, name="home"),
+    path('terms/', views.terms, name='terms'),
     path("sample/", views.sample, name="sample"),
 ]

@@ -118,6 +118,23 @@
             </div>
           </div>
 
+          <!-- T&Cs Checkbox -->
+          <div style="display: flex; align-items: flex-start; gap: 12px; margin: 16px 0;">
+            <input 
+              type="checkbox" 
+              id="tcCheckbox" 
+              onchange="handleTcChange()"
+              style="margin-top: 3px; accent-color: #6C8EF5; width: 16px; height: 16px; cursor: pointer; flex-shrink: 0;"
+            />
+            <label for="tcCheckbox" style="font-size: 13px; color: #9ca3af; line-height: 1.6; cursor: pointer;">
+              I agree to the <a href="/terms" style="color: #6C8EF5;">Terms & Conditions</a>. 
+              I understand my video will be temporarily stored for processing and 
+              <strong style="color: #fff;">deleted within 24 hours</strong>. 
+              In cases where processing fails or is disputed,
+              <strong style="color: #fff;">data may be retained for review purposes.</strong>
+            </label>
+          </div>
+
           <!-- Process button -->
           <button class="btn-primary-custom" id="processBtn" onclick="startProcessing()" disabled>
             Process Video

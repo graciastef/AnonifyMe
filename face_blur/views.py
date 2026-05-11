@@ -16,6 +16,9 @@ def home(request):
 def sample(request):
     return render(request, "sample.html")
 
+def terms(request):
+    return render(request, 'terms.html')
+
 # backend views
 @require_POST
 def upload_video(request):
