@@ -80,6 +80,7 @@ def apply_blur(frame, x1, y1, x2, y2):
 
 
 
+
 # ── Pipeline step functions ───────────────────────────────────────────────────
 
 def fetch_video(file_key: str, filename: str, in_dir: str):
@@ -136,6 +137,7 @@ def extract_frames(video_path: str, frames_dir: str):
 
 
 def detect_faces(frames_dir: str, total_frames: int, file_key: str, device_id: int = 0):
+def detect_faces(frames_dir: str, total_frames: int, file_key: str, device_id: int = 0):
     import os
     import pickle
     import numpy as np
@@ -143,6 +145,9 @@ def detect_faces(frames_dir: str, total_frames: int, file_key: str, device_id: i
     import onnxruntime as ort
     from insightface.app import FaceAnalysis
     from clearml import Task
+
+    failure_conf_min = 0.3
+    failure_conf_max = 0.7
 
     failure_conf_min = 0.3
     failure_conf_max = 0.7
@@ -162,16 +167,23 @@ def detect_faces(frames_dir: str, total_frames: int, file_key: str, device_id: i
     raw_detections = []
     failure_cases = []
 
+    failure_cases = []
+
     for frame_file in frame_files:
         frame = cv2.imread(os.path.join(frames_dir, frame_file))
         faces = face_app.get(frame)
         frame_dets = []
+        frame_bboxes = []
+        has_low_conf = False
         for face in faces:
             x1, y1, x2, y2 = face.bbox.astype(int)
             conf = float(face.det_score)
             frame_dets.append({"xywh": [x1, y1, x2 - x1, y2 - y1], "conf": conf, "kps": face.kps})
+            frame_bboxes.append({"bbox": [int(x1), int(y1), int(x2), int(y2)], "conf": conf})
             if failure_conf_min <= conf < failure_conf_max:
-                failure_cases.append({"frame": frame.copy(), "bbox": [int(x1), int(y1), int(x2), int(y2)], "conf": conf})
+                has_low_conf = True
+        if has_low_conf:
+            failure_cases.append({"frame": frame.copy(), "bboxes": frame_bboxes})
         raw_detections.append(frame_dets)
 
     all_confs = [d["conf"] for frame in raw_detections for d in frame]
@@ -209,7 +221,7 @@ def detect_faces(frames_dir: str, total_frames: int, file_key: str, device_id: i
                 overwrite=True,
                 content_settings=ContentSettings(content_type="image/jpeg"),
             )
-            new_lines.append(_json.dumps({"image": f"{stem}.jpg", "bboxes": [case["bbox"]], "conf": case["conf"]}))
+            new_lines.append(_json.dumps({"image": f"{stem}.jpg", "bboxes": case["bboxes"]}))
 
         existing = b""
         try:
@@ -457,6 +469,7 @@ class VideoProcessingTask:
         pipe = PipelineController(
             name=f"process-{filename}",
             project="anonifyme-video-processing",
+            project="anonifyme-video-processing",
             version="1.0",
             add_pipeline_tags=False,
         )
@@ -482,6 +495,7 @@ class VideoProcessingTask:
             function_kwargs={
                 "frames_dir": "${extract_frames.frames_dir}",
                 "total_frames": "${fetch_video.total_frames}",
+                "file_key": file_key,
                 "file_key": file_key,
                 "device_id": device_id,
             },

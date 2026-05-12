@@ -28,7 +28,7 @@ One-time setup:
 Failure case format in Azure at training/failure_cases/:
   images/<file_key>_<ts>_<n>.jpg
   annotations.jsonl  — written by inference pipeline; humans delete non-face lines.
-    {"image": "<stem>.jpg", "bboxes": [[x1, y1, x2, y2]], "conf": <float>}
+    {"image": "<stem>.jpg", "bboxes": [{"bbox": [x1, y1, x2, y2], "conf": <float>}, ...]}
 """
 
 import os
@@ -104,15 +104,16 @@ def prepare_dataset(
     output_dir: str,
     scrfd_label_train: str,
     scrfd_label_val: str,
-) -> tuple[str, str, str, dict]:
+) -> tuple[str, str, str, str, dict]:
     """
     Appends failure cases to the existing SCRFD labelv2 train file.
     Failure case split is by source video (file_key) to prevent person leakage.
 
     Returns:
-        train_label_path  — WiderFace train + failure case train
+        train_label_path        — WiderFace train + failure case train
         combined_val_label_path — WiderFace val + failure case val
-        fc_val_label_path — failure case val (used for recovery rate metric)
+        fc_val_label_path       — failure case val only (recovery rate metric)
+        wf_val_label_path       — WiderFace val only (unchanged from scrfd_label_val)
         stats
     """
     import os
@@ -163,18 +164,20 @@ def prepare_dataset(
                 bboxes = rec.get("bboxes", [])
                 if not bboxes:
                     continue
-                fh.write(f"# {img_path} {img_w} {img_h}\n")
-                written = 0
-                for x1, y1, x2, y2 in bboxes:
+                lines = []
+                for entry in bboxes:
+                    x1, y1, x2, y2 = entry["bbox"] if isinstance(entry, dict) else entry
                     x1 = max(0.0, min(float(x1), float(img_w - 1)))
                     y1 = max(0.0, min(float(y1), float(img_h - 1)))
                     x2 = max(0.0, min(float(x2), float(img_w - 1)))
                     y2 = max(0.0, min(float(y2), float(img_h - 1)))
                     if x2 <= x1 or y2 <= y1:
                         continue
-                    fh.write(f"{x1} {y1} {x2} {y2}  {no_kps}\n")
-                    written += 1
-                total += written
+                    lines.append(f"{x1} {y1} {x2} {y2}  {no_kps}\n")
+                if lines:
+                    fh.write(f"# {img_path} {img_w} {img_h}\n")
+                    fh.writelines(lines)
+                    total += len(lines)
         return total
 
     def _count_label_file(label_path):
@@ -232,7 +235,7 @@ def prepare_dataset(
     for k, v in stats.items():
         logger.report_single_value(k, v)
 
-    return train_label_path, combined_val_label_path, fc_val_label_path, stats
+    return train_label_path, combined_val_label_path, fc_val_label_path, scrfd_label_val, stats
 
 
 # ── Step 2c: upload_dataset_version ────────────────────────────────────────────
@@ -545,21 +548,66 @@ def hpo_search(
             matched_gt += int(matched.sum().item())
         return matched_gt / total_gt
 
-    def _compute_detection_metrics(labels, outputs):
-        from torchmetrics.detection.mean_ap import MeanAveragePrecision
+    def _wider_face_ap(preds_list, targets_list, iou_thresh=0.5):
+        import numpy as np
 
+        all_entries = []
+        for img_idx, pred in enumerate(preds_list):
+            boxes  = pred["boxes"].numpy()
+            scores = pred["scores"].numpy()
+            for box, score in zip(boxes, scores):
+                all_entries.append((float(score), img_idx, box))
+
+        total_gt = sum(t["boxes"].shape[0] for t in targets_list)
+        if total_gt == 0 or not all_entries:
+            return 0.0
+
+        all_entries.sort(key=lambda x: -x[0])
+        gt_matched  = [np.zeros(t["boxes"].shape[0], dtype=bool) for t in targets_list]
+        gt_boxes_np = [t["boxes"].numpy() for t in targets_list]
+
+        tp_arr = []
+        for _, img_idx, box in all_entries:
+            gt_boxes = gt_boxes_np[img_idx]
+            matched  = gt_matched[img_idx]
+            tp = 0
+            if len(gt_boxes):
+                b     = box[None]
+                ix1   = np.maximum(b[:, 0], gt_boxes[:, 0])
+                iy1   = np.maximum(b[:, 1], gt_boxes[:, 1])
+                ix2   = np.minimum(b[:, 2], gt_boxes[:, 2])
+                iy2   = np.minimum(b[:, 3], gt_boxes[:, 3])
+                inter = np.maximum(0, ix2 - ix1) * np.maximum(0, iy2 - iy1)
+                area_b  = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+                area_gt = (gt_boxes[:, 2] - gt_boxes[:, 0]) * (gt_boxes[:, 3] - gt_boxes[:, 1])
+                iou  = inter / np.maximum(area_b + area_gt - inter, 1e-6)
+                best = int(np.argmax(iou))
+                if iou[best] >= iou_thresh and not matched[best]:
+                    matched[best] = True
+                    tp = 1
+            tp_arr.append(tp)
+
+        tp_arr = np.array(tp_arr, dtype=np.float32)
+        cum_tp = np.cumsum(tp_arr)
+        cum_fp = np.cumsum(1 - tp_arr)
+        prec   = cum_tp / (cum_tp + cum_fp)
+        rec    = cum_tp / total_gt
+        mrec = np.concatenate(([0.], rec, [1.]))
+        mpre = np.concatenate(([0.], prec, [0.]))
+        for i in range(mpre.size - 1, 0, -1):
+            mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
+        idx = np.where(mrec[1:] != mrec[:-1])[0]
+        return float(np.sum((mrec[idx + 1] - mrec[idx]) * mpre[idx + 1]))
+
+    def _compute_detection_metrics(labels, outputs):
         if len(labels) != len(outputs):
             raise ValueError(f"Prediction count {len(outputs)} does not match label image count {len(labels)}")
         if sum(len(item["bboxes"]) for item in labels) == 0:
-            return {"map_50_95": 0.0, "map_50": 0.0, "recall_50": 0.0}
+            return {"ap_50": 0.0, "recall_50": 0.0}
 
         preds, targets = _to_metric_inputs(labels, outputs)
-        metric = MeanAveragePrecision(box_format="xyxy", iou_type="bbox")
-        metric.update(preds, targets)
-        result = metric.compute()
         return {
-            "map_50_95": max(0.0, float(result["map"].item())),
-            "map_50": max(0.0, float(result["map_50"].item())),
+            "ap_50": _wider_face_ap(preds, targets),
             "recall_50": float(_compute_recall_50(preds, targets)),
         }
 
@@ -595,13 +643,12 @@ def hpo_search(
         warmup_iters = trial.suggest_int(  "warmup_iters", 750,  2500, step=250)
         ckpt      = _run_trial(lr, weight_decay, warmup_iters, trial.number)
         metrics   = _eval_metrics(ckpt, val_label_path)
-        logger.report_scalar("hpo", "map_50_95",   metrics["map_50_95"],   trial.number)
-        logger.report_scalar("hpo", "map_50",      metrics["map_50"],      trial.number)
-        logger.report_scalar("hpo", "recall_50",   metrics["recall_50"],   trial.number)
-        logger.report_scalar("hpo", "lr",           lr,           trial.number)
-        logger.report_scalar("hpo", "weight_decay", weight_decay, trial.number)
-        logger.report_scalar("hpo", "warmup_iters", warmup_iters, trial.number)
-        return metrics["map_50"]
+        logger.report_scalar("hpo", "ap_50",        metrics["ap_50"],       trial.number)
+        logger.report_scalar("hpo", "recall_50",    metrics["recall_50"],   trial.number)
+        logger.report_scalar("hpo", "lr",            lr,           trial.number)
+        logger.report_scalar("hpo", "weight_decay",  weight_decay, trial.number)
+        logger.report_scalar("hpo", "warmup_iters",  warmup_iters, trial.number)
+        return metrics["ap_50"]
 
     sampler = optuna.samplers.TPESampler(seed=42)
     study   = optuna.create_study(direction="maximize", sampler=sampler)
@@ -753,6 +800,56 @@ def train_scrfd(
             f"STDERR:\n{stderr[-4000:]}"
         )
 
+    # Parse epoch-averaged losses from training stdout and plot curves.
+    import re
+    import collections
+
+    _epoch_pat = re.compile(r'Epoch\s+\[(\d+)\]\[\d+/\d+\](.+)')
+    _kv_pat    = re.compile(r'(\w+):\s*([\d.eE+\-]+)')
+    epoch_losses = collections.defaultdict(lambda: collections.defaultdict(list))
+    for line in (stdout + stderr).splitlines():
+        m = _epoch_pat.search(line)
+        if not m:
+            continue
+        epoch = int(m.group(1))
+        for km in _kv_pat.finditer(m.group(2)):
+            key = km.group(1)
+            if 'loss' in key.lower():
+                epoch_losses[epoch][key].append(float(km.group(2)))
+
+    if epoch_losses:
+        epochs_sorted = sorted(epoch_losses)
+        epoch_means = {
+            e: {k: sum(v) / len(v) for k, v in losses.items()}
+            for e, losses in epoch_losses.items()
+        }
+        for epoch in epochs_sorted:
+            for key, val in epoch_means[epoch].items():
+                logger.report_scalar("Training Loss", key, val, epoch)
+
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+
+            loss_keys = sorted({k for m in epoch_means.values() for k in m})
+            fig, ax = plt.subplots(figsize=(10, 5))
+            for key in loss_keys:
+                ys = [epoch_means[e].get(key, float('nan')) for e in epochs_sorted]
+                ax.plot(epochs_sorted, ys, marker='o', markersize=3, label=key)
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Loss')
+            ax.set_title('Training Loss Curves')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            plot_path = os.path.join(work_dir, 'loss_curves.png')
+            fig.savefig(plot_path, dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            logger.report_image("Loss Curves", "train", local_path=plot_path)
+            logger.report_text(f"Loss curve saved to {plot_path}")
+        except Exception as _plot_exc:
+            logger.report_text(f"[WARN] Could not generate loss plot: {_plot_exc}")
+
     checkpoints = sorted(Path(work_dir).glob("best_*.pth")) or sorted(Path(work_dir).glob("epoch_*.pth"))
     if not checkpoints:
         raise FileNotFoundError(f"No checkpoint found in {work_dir}")
@@ -766,7 +863,7 @@ def train_scrfd(
 
 def evaluate_and_tag(
     checkpoint_path: str,
-    val_label_path: str,
+    wf_val_label_path: str,
     fc_val_label_path: str,
     output_dir: str,
     version: str,
@@ -775,10 +872,12 @@ def evaluate_and_tag(
     insightface_ref: str,
 ) -> tuple[float, float, float, bool, str]:
     """
-    Exports checkpoint to ONNX, computes mAP@0.50:0.95, mAP@0.5, and
-    recall@0.5 IoU on labelv2 validation sets, and tags as 'candidate' if
-    combined-val mAP@0.5 improves.
-    Failure-case validation is reported separately, not used for promotion decision.
+    Exports checkpoint to ONNX, runs four separate evaluations:
+      new_wf  — new model on WiderFace val
+      new_fc  — new model on failure-case val
+      current_wf — production model on WiderFace val
+      current_fc — production model on failure-case val
+    Promotion decision is based on WiderFace val map@0.5 only.
     """
     import os
     import subprocess
@@ -872,6 +971,8 @@ def evaluate_and_tag(
         input_img = next(Path(wider_val_dir).rglob("*.jpg"), None)
         if input_img is None:
             raise FileNotFoundError(f"No .jpg files found under {wider_val_dir} for ONNX export input")
+        # scrfd2onnx.py defaults to tests/data/t1.jpg when --input-img is not
+        # supplied; keep that fixture available even though we pass input_img.
         default_input_img = Path(insightface_dir) / scrfd_subdir / "tests" / "data" / "t1.jpg"
         default_input_img.parent.mkdir(parents=True, exist_ok=True)
         if not default_input_img.exists():
@@ -982,21 +1083,66 @@ def evaluate_and_tag(
             matched_gt += int(matched.sum().item())
         return matched_gt / total_gt
 
-    def _compute_detection_metrics(labels, outputs):
-        from torchmetrics.detection.mean_ap import MeanAveragePrecision
+    def _wider_face_ap(preds_list, targets_list, iou_thresh=0.5):
+        import numpy as np
 
+        all_entries = []
+        for img_idx, pred in enumerate(preds_list):
+            boxes  = pred["boxes"].numpy()
+            scores = pred["scores"].numpy()
+            for box, score in zip(boxes, scores):
+                all_entries.append((float(score), img_idx, box))
+
+        total_gt = sum(t["boxes"].shape[0] for t in targets_list)
+        if total_gt == 0 or not all_entries:
+            return 0.0
+
+        all_entries.sort(key=lambda x: -x[0])
+        gt_matched  = [np.zeros(t["boxes"].shape[0], dtype=bool) for t in targets_list]
+        gt_boxes_np = [t["boxes"].numpy() for t in targets_list]
+
+        tp_arr = []
+        for _, img_idx, box in all_entries:
+            gt_boxes = gt_boxes_np[img_idx]
+            matched  = gt_matched[img_idx]
+            tp = 0
+            if len(gt_boxes):
+                b     = box[None]
+                ix1   = np.maximum(b[:, 0], gt_boxes[:, 0])
+                iy1   = np.maximum(b[:, 1], gt_boxes[:, 1])
+                ix2   = np.minimum(b[:, 2], gt_boxes[:, 2])
+                iy2   = np.minimum(b[:, 3], gt_boxes[:, 3])
+                inter = np.maximum(0, ix2 - ix1) * np.maximum(0, iy2 - iy1)
+                area_b  = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+                area_gt = (gt_boxes[:, 2] - gt_boxes[:, 0]) * (gt_boxes[:, 3] - gt_boxes[:, 1])
+                iou  = inter / np.maximum(area_b + area_gt - inter, 1e-6)
+                best = int(np.argmax(iou))
+                if iou[best] >= iou_thresh and not matched[best]:
+                    matched[best] = True
+                    tp = 1
+            tp_arr.append(tp)
+
+        tp_arr = np.array(tp_arr, dtype=np.float32)
+        cum_tp = np.cumsum(tp_arr)
+        cum_fp = np.cumsum(1 - tp_arr)
+        prec   = cum_tp / (cum_tp + cum_fp)
+        rec    = cum_tp / total_gt
+        mrec = np.concatenate(([0.], rec, [1.]))
+        mpre = np.concatenate(([0.], prec, [0.]))
+        for i in range(mpre.size - 1, 0, -1):
+            mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
+        idx = np.where(mrec[1:] != mrec[:-1])[0]
+        return float(np.sum((mrec[idx + 1] - mrec[idx]) * mpre[idx + 1]))
+
+    def _compute_detection_metrics(labels, outputs):
         if len(labels) != len(outputs):
             raise ValueError(f"Prediction count {len(outputs)} does not match label image count {len(labels)}")
         if sum(len(item["bboxes"]) for item in labels) == 0:
-            return {"map_50_95": 0.0, "map_50": 0.0, "recall_50": 0.0}
+            return {"ap_50": 0.0, "recall_50": 0.0}
 
         preds, targets = _to_metric_inputs(labels, outputs)
-        metric = MeanAveragePrecision(box_format="xyxy", iou_type="bbox")
-        metric.update(preds, targets)
-        result = metric.compute()
         return {
-            "map_50_95": max(0.0, float(result["map"].item())),
-            "map_50": max(0.0, float(result["map_50"].item())),
+            "ap_50": _wider_face_ap(preds, targets),
             "recall_50": float(_compute_recall_50(preds, targets)),
         }
 
@@ -1069,10 +1215,17 @@ def evaluate_and_tag(
             return _eval_checkpoint(model_path, label_path, output_name)
         raise ValueError(f"Unsupported model format for evaluation: {model_path}")
 
-    onnx_path   = _export_onnx(checkpoint_path, f"det_10g_{version}.onnx")
-    new_metrics = _eval(onnx_path, val_label_path, "combined_val")
+    onnx_path = _export_onnx(checkpoint_path, f"det_10g_{version}.onnx")
 
-    current_metrics = {"map_50_95": 0.0, "map_50": 0.0, "recall_50": 0.0}
+    has_fc = Path(fc_val_label_path).exists() and Path(fc_val_label_path).stat().st_size > 0
+
+    new_wf_metrics = _eval(onnx_path, wf_val_label_path, "new_widerface_val")
+    new_fc_metrics = {"ap_50": 0.0, "recall_50": 0.0}
+    if has_fc:
+        new_fc_metrics = _eval(onnx_path, fc_val_label_path, "new_fc_val")
+
+    current_wf_metrics = {"ap_50": 0.0, "recall_50": 0.0}
+    current_fc_metrics = {"ap_50": 0.0, "recall_50": 0.0}
     try:
         load_dotenv()
         from azure.identity import DefaultAzureCredential
@@ -1085,7 +1238,9 @@ def evaluate_and_tag(
             prod_model = os.path.join(eval_dir, f"current_production{prod_suffix}")
             with open(prod_model, "wb") as fh:
                 fh.write(container.get_blob_client(prod_blob).download_blob().readall())
-            current_metrics = _eval(prod_model, val_label_path, "current_production")
+            current_wf_metrics = _eval(prod_model, wf_val_label_path, "current_widerface_val")
+            if has_fc:
+                current_fc_metrics = _eval(prod_model, fc_val_label_path, "current_fc_val")
         else:
             Task.current_task().get_logger().report_text(
                 f"Production model pointer {current_production_pointer_blob} resolves to {prod_blob!r}. "
@@ -1099,14 +1254,15 @@ def evaluate_and_tag(
             "new model wins by default."
         )
 
-    is_candidate = new_metrics["map_50"] > current_metrics["map_50"]
-
-    fc_metrics = {"map_50_95": 0.0, "map_50": 0.0, "recall_50": 0.0}
-    if Path(fc_val_label_path).exists() and Path(fc_val_label_path).stat().st_size > 0:
-        fc_metrics = _eval(onnx_path, fc_val_label_path, "failure_case_val")
+    is_candidate = new_wf_metrics["ap_50"] > current_wf_metrics["ap_50"]
 
     logger = Task.current_task().get_logger()
-    for split, m in [("new", new_metrics), ("current", current_metrics), ("fc_val", fc_metrics)]:
+    for split, m in [
+        ("new_wf",      new_wf_metrics),
+        ("new_fc",      new_fc_metrics),
+        ("current_wf",  current_wf_metrics),
+        ("current_fc",  current_fc_metrics),
+    ]:
         for metric, value in m.items():
             logger.report_single_value(f"{split}_{metric}", value)
     logger.report_single_value("is_candidate", int(is_candidate))
@@ -1117,15 +1273,15 @@ def evaluate_and_tag(
         model.tags = sorted(set((model.tags or []) + ["candidate"]))
         logger.report_text(
             f"scrfd-{version} tagged as candidate "
-            f"(map_50 {new_metrics['map_50']:.4f} > {current_metrics['map_50']:.4f})"
+            f"(wf_ap_50 {new_wf_metrics['ap_50']:.4f} > {current_wf_metrics['ap_50']:.4f})"
         )
     else:
         logger.report_text(
             f"scrfd-{version} did not beat production "
-            f"(map_50 {new_metrics['map_50']:.4f} <= {current_metrics['map_50']:.4f})"
+            f"(wf_ap_50 {new_wf_metrics['ap_50']:.4f} <= {current_wf_metrics['ap_50']:.4f})"
         )
 
-    return new_metrics["map_50_95"], new_metrics["map_50"], new_metrics["recall_50"], is_candidate, onnx_path
+    return new_wf_metrics["ap_50"], new_wf_metrics["recall_50"], is_candidate, onnx_path
 
 
 # ── Step 5: upload_model ───────────────────────────────────────────────────────
@@ -1206,7 +1362,7 @@ class SCRFDRetrainingPipeline:
                 "scrfd_label_train": self.scrfd_label_train,
                 "scrfd_label_val":   self.scrfd_label_val,
             },
-            function_return=["train_label_path", "combined_val_label_path", "fc_val_label_path", "dataset_stats"],
+            function_return=["train_label_path", "combined_val_label_path", "fc_val_label_path", "wf_val_label_path", "dataset_stats"],
             parents=["fetch_training_data"],
         )
 
@@ -1270,7 +1426,7 @@ class SCRFDRetrainingPipeline:
             function=evaluate_and_tag,
             function_kwargs={
                 "checkpoint_path":   "${train_scrfd.checkpoint_path}",
-                "val_label_path":    "${prepare_dataset.combined_val_label_path}",
+                "wf_val_label_path": "${prepare_dataset.wf_val_label_path}",
                 "fc_val_label_path": "${prepare_dataset.fc_val_label_path}",
                 "output_dir":        self.data_dir,
                 "version":           self.version,
@@ -1278,7 +1434,7 @@ class SCRFDRetrainingPipeline:
                 "insightface_dir":   self.insightface_dir,
                 "insightface_ref":   self.insightface_ref,
             },
-            function_return=["map_50_95", "map_50", "recall_50", "is_candidate", "onnx_path"],
+            function_return=["ap_50", "recall_50", "is_candidate", "onnx_path"],
             parents=["train_scrfd"],
         )
 
