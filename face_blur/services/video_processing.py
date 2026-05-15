@@ -137,7 +137,6 @@ def extract_frames(video_path: str, frames_dir: str):
 
 
 def detect_faces(frames_dir: str, total_frames: int, file_key: str, device_id: int = 0):
-def detect_faces(frames_dir: str, total_frames: int, file_key: str, device_id: int = 0):
     import os
     import pickle
     import numpy as np
