@@ -468,7 +468,6 @@ class VideoProcessingTask:
         pipe = PipelineController(
             name=f"process-{filename}",
             project="anonifyme-video-processing",
-            project="anonifyme-video-processing",
             version="1.0",
             add_pipeline_tags=False,
         )
