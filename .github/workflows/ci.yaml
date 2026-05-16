@@ -145,6 +145,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [django-ci, retraining-import-check]
     if: github.event_name == 'push'
+    environment: .env
 
     steps:
       - name: Install Railway CLI
