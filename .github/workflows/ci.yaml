@@ -153,12 +153,12 @@ jobs:
 
       - name: Deploy to Dev
         if: github.ref == 'refs/heads/dev'
-        run: railway redeploy --yes
+        run: railway redeploy --service anonifyme-dev --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_DEV }}
 
       - name: Deploy to Production
         if: github.ref == 'refs/heads/main'
-        run: railway redeploy --yes
+        run: railway redeploy --service anonifyme-production --yes
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PROD }}
