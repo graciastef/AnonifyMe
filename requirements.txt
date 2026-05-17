@@ -19,3 +19,4 @@ imageio[ffmpeg]==2.37.3
 tf-keras==2.19.0
 tensorflow==2.19.0
 protobuf
+whitenoise==6.9.0
