@@ -137,7 +137,7 @@ jobs:
 
   # ── Job 3: Deploy to Railway ───────────────────────────────────────────────────
   # Only runs on direct pushes (not pull requests) after both CI jobs pass.
-  # dev branch   → Railway Dev environment
+  # staging branch   → Railway Staging environment
   # main branch  → Railway Production environment
   deploy:
     name: Deploy to Railway
@@ -150,7 +150,7 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Deploy to Dev
+      - name: Deploy to Staging
         if: github.ref == 'refs/heads/staging'
         run: railway redeploy --service anonifyme-staging --yes
         env:
