@@ -1,0 +1,4 @@
+[phases.install]
+cmds = [
+  "pip install $(grep -v 'onnxruntime-gpu' requirements.txt | grep -v 'torch' | grep -v 'tensorflow' | grep -v '^#' | grep -v '^$')"
+]
