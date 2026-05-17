@@ -11,6 +11,7 @@ jobs:
   django-ci:
     name: Django App — install & health check
     runs-on: ubuntu-latest
+    environment: .env
 
     env:
       DJANGO_SETTINGS_MODULE: config.settings
