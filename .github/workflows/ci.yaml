@@ -134,30 +134,3 @@ jobs:
         run: |
           python -m py_compile face_blur/services/video_processing.py
           echo "✅ video_processing.py — no syntax errors"
-
-  # ── Job 3: Deploy to Railway ───────────────────────────────────────────────────
-  # Only runs on direct pushes (not pull requests) after both CI jobs pass.
-  # staging branch   → Railway Staging environment
-  # main branch  → Railway Production environment
-  deploy:
-    name: Deploy to Railway
-    runs-on: ubuntu-latest
-    needs: [django-ci, retraining-import-check]
-    if: github.event_name == 'push'
-    environment: .env
-
-    steps:
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Staging
-        if: github.ref == 'refs/heads/staging'
-        run: railway redeploy --service anonifyme-staging --yes
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
-
-      - name: Deploy to Production
-        if: github.ref == 'refs/heads/main'
-        run: railway redeploy --service anonifyme-production --yes
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_PROD }}
