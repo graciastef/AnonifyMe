@@ -2,7 +2,7 @@ Django==6.0.3
 djangorestframework==3.17.1
 onnx==1.16.2
 onnxruntime==1.24.4
-onnxruntime-gpu==1.24.4; sys_platform != 'darwin'
+onnxruntime==1.24.4; sys_platform != 'darwin'
 
 azure-storage-blob==12.28.0
 azure-identity==1.25.3
