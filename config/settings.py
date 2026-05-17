@@ -39,7 +39,12 @@ SECRET_KEY = 'django-insecure-m(m^$!=rn5$(9ge$uc4n+bd#1=^f^gt-)r-cnyq$ny=%p-=h^d
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    "anonifyme-staging.up.railway.app",
+    "anonifyme-production.up.railway.app",
+    "localhost",
+    "127.0.0.1"
+]
 
 
 # Application definition
@@ -109,10 +114,12 @@ DATABASES = {
 
 CSRF_TRUSTED_ORIGINS = [
     "https://*.lhr.life",
+    "https://*.railway.app"
 ]
 
 CSRF_ALLOWED_ORIGINS = [
     "https://*.lhr.life",
+    "https://*.railway.app"
 ]
 
 # Password validation
