@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, staging]
   pull_request:
-    branches: [main, dev]
+    branches: [main, staging]
 
 jobs:
   # ── Job 1: Django web app (Python 3.12) ───────────────────────────────────────
