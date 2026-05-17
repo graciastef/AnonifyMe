@@ -152,10 +152,10 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy to Dev
-        if: github.ref == 'refs/heads/dev'
-        run: railway redeploy --service anonifyme-dev --yes
+        if: github.ref == 'refs/heads/staging'
+        run: railway redeploy --service anonifyme-staging --yes
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_DEV }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_STAGING }}
 
       - name: Deploy to Production
         if: github.ref == 'refs/heads/main'
