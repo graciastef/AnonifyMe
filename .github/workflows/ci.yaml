@@ -74,13 +74,13 @@ jobs:
       - name: Check ClearML connectivity
         run: |
           if [ -z "$CLEARML_API_HOST" ]; then
-            echo "❌ CLEARML_API_HOST is not set — add it as a GitHub Secret"
+            echo "CLEARML_API_HOST is not set — add it as a GitHub Secret"
             exit 1
           fi
           echo "CLEARML_API_HOST=$CLEARML_API_HOST"
           curl -sf -o /dev/null "$CLEARML_API_HOST" \
-            && echo "✅ ClearML server reachable" \
-            || echo "⚠️  ClearML server not reachable (non-blocking in CI)"
+            && echo "ClearML server reachable" \
+            || echo "ClearML server not reachable (non-blocking in CI)"
 
       - name: Django system check
         run: |
@@ -100,9 +100,9 @@ jobs:
         env:
           DB_HOST: localhost
 
-  # ── Job 2: Retraining pipeline — import smoke test only ───────────────────────
+  # ── Job 2: Pipelines — import smoke test only ───────────────────────
   retraining-import-check:
-    name: Retraining Pipeline — import smoke test
+    name: Pipeline Smoke Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -128,9 +128,9 @@ jobs:
       - name: Syntax check — retraining pipeline
         run: |
           python -m py_compile retraining/pipeline.py
-          echo "✅ retraining/pipeline.py — no syntax errors"
+          echo "retraining/pipeline.py — no syntax errors"
 
       - name: Syntax check — video processing pipeline
         run: |
           python -m py_compile face_blur/services/video_processing.py
-          echo "✅ video_processing.py — no syntax errors"
+          echo "video_processing.py — no syntax errors"
