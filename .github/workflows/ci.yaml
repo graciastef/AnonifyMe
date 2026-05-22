@@ -134,3 +134,28 @@ jobs:
         run: |
           python -m py_compile face_blur/services/video_processing.py
           echo "video_processing.py — no syntax errors"
+
+    trigger-retraining:
+        name: Trigger Scheduled ClearML Retraining Pipeline
+        runs-on: ubuntu-latest
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        environment: .env
+    
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v4
+    
+          - name: Set up Python
+            uses: actions/setup-python@v5
+            with:
+              python-version: "3.9"
+    
+          - name: Install ClearML
+            run: pip install clearml
+    
+          - name: Trigger retraining pipeline
+            run: python -m retraining
+            env:
+              CLEARML_API_HOST: ${{ secrets.CLEARML_API_HOST }}
+              CLEARML_API_ACCESS_KEY: ${{ secrets.CLEARML_API_ACCESS_KEY }}
+              CLEARML_API_SECRET_KEY: ${{ secrets.CLEARML_API_SECRET_KEY }}
