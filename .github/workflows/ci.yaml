@@ -5,12 +5,21 @@ on:
     branches: [main, staging]
   pull_request:
     branches: [main, staging]
+  schedule:
+    - cron: '0 0 1 * *'  # runs at midnight UTC on the 1st of every month
+  workflow_dispatch:      # allows manual trigger from GitHub Actions UI
+    inputs:
+      reason:
+        description: 'Trigger Manual Retraining.'
+        required: false
+        default: 'Manual trigger.'
 
 jobs:
   # ── Job 1: Django web app (Python 3.12) ───────────────────────────────────────
   django-ci:
     name: Django App — install & health check
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     environment: .env
 
     env:
@@ -74,13 +83,13 @@ jobs:
       - name: Check ClearML connectivity
         run: |
           if [ -z "$CLEARML_API_HOST" ]; then
-            echo "❌ CLEARML_API_HOST is not set — add it as a GitHub Secret"
+            echo "CLEARML_API_HOST is not set — add it as a GitHub Secret"
             exit 1
           fi
           echo "CLEARML_API_HOST=$CLEARML_API_HOST"
           curl -sf -o /dev/null "$CLEARML_API_HOST" \
-            && echo "✅ ClearML server reachable" \
-            || echo "⚠️  ClearML server not reachable (non-blocking in CI)"
+            && echo "ClearML server reachable" \
+            || echo "ClearML server not reachable (non-blocking in CI)"
 
       - name: Django system check
         run: |
@@ -100,10 +109,11 @@ jobs:
         env:
           DB_HOST: localhost
 
-  # ── Job 2: Retraining pipeline — import smoke test only ───────────────────────
+  # ── Job 2: Pipelines — import smoke test only ───────────────────────
   retraining-import-check:
-    name: Retraining Pipeline — import smoke test
+    name: Pipeline Smoke Tests
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - name: Checkout code
@@ -128,9 +138,37 @@ jobs:
       - name: Syntax check — retraining pipeline
         run: |
           python -m py_compile retraining/pipeline.py
-          echo "✅ retraining/pipeline.py — no syntax errors"
+          echo "retraining/pipeline.py — no syntax errors"
 
       - name: Syntax check — video processing pipeline
         run: |
           python -m py_compile face_blur/services/video_processing.py
-          echo "✅ video_processing.py — no syntax errors"
+          echo "video_processing.py — no syntax errors"
+
+    # ── Job 3: Trigger retraining pipeline on ClearML ─────────────────────────────
+  # Runs on monthly schedule or manual dispatch only.
+  # Enqueues the pipeline on ClearML — executed when SageMaker agent is online.
+  trigger-retraining:
+    name: Trigger Monthly Retraining
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    environment: .env
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install ClearML
+        run: pip install clearml==1.16.5
+
+      - name: Enqueue retraining pipeline on ClearML
+        run: python scripts/trigger_retraining.py
+        env:
+          CLEARML_API_HOST: ${{ secrets.CLEARML_API_HOST }}
+          CLEARML_API_ACCESS_KEY: ${{ secrets.CLEARML_API_ACCESS_KEY }}
+          CLEARML_API_SECRET_KEY: ${{ secrets.CLEARML_API_SECRET_KEY }}
