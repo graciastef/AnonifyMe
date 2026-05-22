@@ -5,12 +5,21 @@ on:
     branches: [main, staging]
   pull_request:
     branches: [main, staging]
+  schedule:
+    - cron: '0 0 1 * *'  # runs at midnight UTC on the 1st of every month
+  workflow_dispatch:      # allows manual trigger from GitHub Actions UI
+    inputs:
+      reason:
+        description: 'Trigger Manual Retraining.'
+        required: false
+        default: 'Manual trigger.'
 
 jobs:
   # ── Job 1: Django web app (Python 3.12) ───────────────────────────────────────
   django-ci:
     name: Django App — install & health check
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     environment: .env
 
     env:
@@ -104,6 +113,7 @@ jobs:
   retraining-import-check:
     name: Pipeline Smoke Tests
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:
       - name: Checkout code
@@ -159,3 +169,31 @@ jobs:
               CLEARML_API_HOST: ${{ secrets.CLEARML_API_HOST }}
               CLEARML_API_ACCESS_KEY: ${{ secrets.CLEARML_API_ACCESS_KEY }}
               CLEARML_API_SECRET_KEY: ${{ secrets.CLEARML_API_SECRET_KEY }}
+
+    # ── Job 3: Trigger retraining pipeline on ClearML ─────────────────────────────
+  # Runs on monthly schedule or manual dispatch only.
+  # Enqueues the pipeline on ClearML — executed when SageMaker agent is online.
+  trigger-retraining:
+    name: Trigger Monthly Retraining
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    environment: .env
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install ClearML
+        run: pip install clearml==1.16.5
+
+      - name: Enqueue retraining pipeline on ClearML
+        run: python scripts/trigger_retraining.py
+        env:
+          CLEARML_API_HOST: ${{ secrets.CLEARML_API_HOST }}
+          CLEARML_API_ACCESS_KEY: ${{ secrets.CLEARML_API_ACCESS_KEY }}
+          CLEARML_API_SECRET_KEY: ${{ secrets.CLEARML_API_SECRET_KEY }}
