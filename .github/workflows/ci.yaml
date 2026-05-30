@@ -5,14 +5,14 @@ on:
     branches: [main, staging]
   pull_request:
     branches: [main, staging]
-  schedule:
-    - cron: '0 0 1 * *'  # runs at midnight UTC on the 1st of every month
-  workflow_dispatch:      # allows manual trigger from GitHub Actions UI
-    inputs:
-      reason:
-        description: 'Trigger Manual Retraining.'
-        required: false
-        default: 'Manual trigger.'
+  # schedule:
+  #   - cron: '0 0 1 * *'  # runs at midnight UTC on the 1st of every month
+  # workflow_dispatch:      # allows manual trigger from GitHub Actions UI
+  #   inputs:
+  #     reason:
+  #       description: 'Trigger Manual Retraining.'
+  #       required: false
+  #       default: 'Manual trigger.'
 
 jobs:
   # ── Job 1: Django web app (Python 3.12) ───────────────────────────────────────
