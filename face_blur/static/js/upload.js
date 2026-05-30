@@ -230,7 +230,7 @@ function showError(message) {
 // DOWNLOAD
 async function handleDownload() {
   try {
-    const res = await fetch(`/api/download/${encodeURIComponent(currentFileKey)}/`)
+    const res = await fetch(`/api/videos/${encodeURIComponent(currentFileKey)}/processed/`)
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Download failed')
     window.location.href = data.download_url
